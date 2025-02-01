@@ -131,10 +131,14 @@ erpnext.taxes_and_totals = class TaxesAndTotals extends erpnext.payments {
 			for (const item of this.frm.doc.items || []) {
 				frappe.model.round_floats_in(item);
 				item.net_rate = item.rate;
+				item.total_sqm = flt(item.qty) * flt(item.length) * flt(item.item_conversion);
+
+				// Calculate amount based on total_sqm
+				item.amount = flt(item.total_sqm) * flt(item.rate);
 				item.qty = item.qty === undefined ? (me.frm.doc.is_return ? -1 : 1) : item.qty;
 
 				if (!(me.frm.doc.is_return || me.frm.doc.is_debit_note)) {
-					item.net_amount = item.amount = flt(item.rate * item.qty, precision("amount", item));
+					item.net_amount = item.amount = flt(item.total_sqm) * flt(item.rate);
 				}
 				else {
 					// allow for '0' qty on Credit/Debit notes
@@ -146,8 +150,9 @@ erpnext.taxes_and_totals = class TaxesAndTotals extends erpnext.payments {
 							qty = flt(item.qty);
 						}
 					}
+					item.total_sqm = flt(item.qty) * flt(item.length) * flt(item.item_conversion);
 
-					item.net_amount = item.amount = flt(item.rate * qty, precision("amount", item));
+					item.net_amount = item.amount = flt(item.total_sqm) * flt(item.rate);
 				}
 
 				item.item_tax_amount = 0.0;
@@ -298,15 +303,35 @@ erpnext.taxes_and_totals = class TaxesAndTotals extends erpnext.payments {
 		var me = this;
 		this.frm.doc.total_qty = this.frm.doc.total = this.frm.doc.base_total = this.frm.doc.net_total = this.frm.doc.base_net_total = 0.0;
 
-		$.each(this.frm._items || [], function(i, item) {
-			me.frm.doc.total += item.amount;
-			me.frm.doc.total_qty += item.qty;
-			me.frm.doc.base_total += item.base_amount;
-			me.frm.doc.net_total += item.net_amount;
-			me.frm.doc.base_net_total += item.base_net_amount;
+		// Let's first ensure we have all items including the last added one
+		const all_items = this.frm.doc.items || [];
+
+		$.each(all_items, function(i, item) {
+			// Calculate for each item including the last one
+			if (item) {  // Add a check to ensure item exists
+				item.total_sqm = flt(item.qty) * flt(item.length) * flt(item.item_conversion);
+				item.amount = flt(item.total_sqm) * flt(item.rate);
+				item.net_amount = item.amount;
+				item.base_amount = item.amount;
+				item.base_net_amount = item.net_amount;
+
+				// Update running totals
+				me.frm.doc.total += flt(item.amount);
+				me.frm.doc.total_qty += flt(item.qty);
+				me.frm.doc.base_total += flt(item.base_amount);
+				me.frm.doc.net_total += flt(item.net_amount);
+				me.frm.doc.base_net_total += flt(item.base_net_amount);
+			}
 		});
 
 		frappe.model.round_floats_in(this.frm.doc, ["total", "base_total", "net_total", "base_net_total"]);
+
+		// Force refresh the totals fields
+		this.frm.refresh_field('total');
+		this.frm.refresh_field('net_total');
+		this.frm.refresh_field('base_total');
+		this.frm.refresh_field('base_net_total');
+		this.frm.refresh_field('total_qty');
 	}
 
 	calculate_shipping_charges() {

@@ -224,7 +224,8 @@ class calculate_taxes_and_totals:
 				elif not item.qty and self.doc.get("is_debit_note"):
 					item.amount = flt(item.rate, item.precision("amount"))
 				else:
-					item.amount = flt(item.rate * item.qty, item.precision("amount"))
+					item.total_sqm = flt(item.qty) * flt(item.length) * flt(item.item_conversion)
+					item.amount = flt(item.total_sqm) * flt(item.rate)
 
 				item.net_amount = item.amount
 
